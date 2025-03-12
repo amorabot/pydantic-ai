@@ -1,0 +1,2 @@
+1. Create a local env.py file containing your API_KEYS. They should then be accessed by any agents explicitly.
+    Example: agent_examples/hello_world.py
