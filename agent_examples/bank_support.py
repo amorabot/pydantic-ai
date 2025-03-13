@@ -11,13 +11,13 @@ import asyncio
 from env import OPENAI_API_KEY
 
 
-# A basic class to represent a client, aiming to simulate a real client object and db queries
+# A basic class to represent a client, aiming to simulate a real client object and async db queries
 class MockClient:
     name: str
     balance: float
     pending: float
 
-    #  @classmethod -> static method
+    #  @classmethod -> for static methods
 
     def __init__(self, client_name: str, balance: float, pending: float):
         self.name = client_name
@@ -59,7 +59,11 @@ class MockDatabase:
 @dataclass
 class SupportAgentDependencies:
     """
-    Dependencies for 
+    Dependencies for the Bank Support Agent. It represents all the data that needs to be passed on to the agent
+    in order to dynamically run things like tools and system prompts.
+    Typically has generic data, db connections and some logic to give that context to the agent.
+
+    It should be delcared as a dataclass, since it should not have accompanying behavior.
     """
     client_id: int
     database: MockDatabase
@@ -71,13 +75,21 @@ class SupportAgentDependencies:
 
 
 class SupportResult(BaseModel):
+    """
+    It's a pydantic model to represent the result of the agent.
+    With that schema, the agent can parse the result in a type-safe and structured way.
+    """
     support_advice: str = Field(description='Advice returned to the customer')
     block_card: bool = Field(description='Whether to block their card or not')
     risk: int = Field(description='Risk level of query', ge=0, le=10)
 
+# Initializing the mock database
 db = MockDatabase()
 
+# Opening the database
 db.open()
+
+# Adding clients to the database
 client_john = MockClient(client_name="John Doe", balance=1000, pending=12.4)
 db.add_client(1, client_john)
 client_mel = MockClient(client_name="Melissa Rayes", balance=69, pending=100)
@@ -96,6 +108,8 @@ support_agent = Agent(model,
                     ))
 
 # Agents tools, and general configs
+
+# When prompted about the user's name, the agent will use this function as a tool to try and get the result.
 @support_agent.system_prompt  
 async def add_customer_name(ctx: RunContext[SupportAgentDependencies]) -> str:
     db_ref = ctx.deps.database
@@ -104,9 +118,10 @@ async def add_customer_name(ctx: RunContext[SupportAgentDependencies]) -> str:
     db_ref.close()
     return f"The customer's name is {customer_name!r}"
 
+# When prompted about the user's balance, the agent will use this function as a tool to get the result.
+# Depending on the prompt given, it can also infer the tool's arguments and pass them automatically.
 @support_agent.tool
 async def customer_balance(ctx: RunContext[SupportAgentDependencies], include_pending: bool) -> float:
-    """Returns the customer's current account balance."""  
     db_ref = ctx.deps.database
     db_ref.open()
     balance = await db_ref.get_client(client_id=ctx.deps.client_id).get_balance(include_pending=include_pending)
